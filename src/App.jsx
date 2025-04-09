@@ -336,7 +336,6 @@ function AppContent() {
       await api.deleteCase(caseId);
       setCases(cases.filter((c) => c._id !== caseId));
       setCurrentCase(null); // Clear the current case
-      setView("home"); // Navigate to home instead of revise
       showNotification('Case deleted successfully');
     } catch (error) {
       console.error('Error deleting case:', error);
