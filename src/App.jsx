@@ -17,11 +17,9 @@ import {
 } from "recharts";
 import {
   Activity,
-  Home,
   Edit,
   Plus,
   Trash2,
-  BarChart2,
   Search,
   FileText,
   AlertTriangle,
@@ -39,7 +37,6 @@ function AppContent() {
   const navigate = useNavigate();
   
   // Update state initializations with localStorage
-  const [view, setView] = useState("home");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cases, setCases] = useState(() => {
     const savedCases = localStorage.getItem(`${STORAGE_KEY}_cases`);
@@ -88,7 +85,7 @@ function AppContent() {
   useEffect(() => {
     const fetchCases = async () => {
       // Only fetch if we don't have cases in state
-      if (cases.length === 0) {
+      // if (cases.length === 0) {
         try {
           const fetchedCases = await api.getAllCases();
           setCases(fetchedCases);
@@ -96,7 +93,7 @@ function AppContent() {
           console.error('Error fetching cases:', error);
           showNotification('Error loading cases. Please try again.');
         }
-      }
+      // }
     };
     fetchCases();
   }, []); // Remove cases from dependency array to prevent infinite loop
@@ -115,8 +112,6 @@ function AppContent() {
   }, []);
 
   // Application state
-  const [currentPage, setCurrentPage] = useState(1);
-  const casesPerPage = 10;
 
   // Fetch cases on component mount
   useEffect(() => {
@@ -334,10 +329,6 @@ function AppContent() {
     }
   };
 
-  // Function to navigate back to home
-  const goHome = () => {
-    setView("home");
-  };
 
   // Update handleDeleteCase to use API
   const handleDeleteCase = async (caseId) => {
@@ -1328,35 +1319,6 @@ function Analytics({
   const formatPercent = (num) => {
     return num.toFixed(1) + "%";
   };
-
-  // Get month names for last 5 months for chart display
-  const getLastFiveMonths = () => {
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    const result = [];
-    const today = new Date();
-
-    for (let i = 4; i >= 0; i--) {
-      const monthIndex = (today.getMonth() - i + 12) % 12;
-      result.push(months[monthIndex]);
-    }
-
-    return result;
-  };
-
-  const lastFiveMonths = getLastFiveMonths();
 
   // Add helper function to get time periods based on selected filter
   const getTimePeriodsForChart = () => {
