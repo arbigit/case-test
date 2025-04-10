@@ -1,5 +1,0 @@
-[[redirects]]
-from = "/api/*"  # This is the original path you want to redirect from
-to = "http://149.28.85.9:5000/api/:splat"  # The IP address you want to redirect to
-status = 301  # Use 301 for a permanent redirect, or 302 for temporary
-force = true  # Optional: Use this to force the redirect even if the requested file exists
