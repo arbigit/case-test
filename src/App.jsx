@@ -33,6 +33,10 @@ import html2canvas from 'html2canvas';
 // Add new constant for localStorage key
 const STORAGE_KEY = 'dentalLabData';
 
+// Add new constant for password storage
+const PASSWORD_KEY = 'dentalLabPassword';
+const CORRECT_PASSWORD = 'cda'; // You should store this securely in environment variables
+
 // Create new wrapper component for the main app content
 function AppContent() {
   const navigate = useNavigate();
@@ -563,9 +567,43 @@ function AppContent() {
 
 // Main application component
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem(PASSWORD_KEY) === 'true';
+  });
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(PASSWORD_KEY);
+    setIsAuthenticated(false);
+  };
+
+  // Add logout button to AppContent
+  const AppContentWithLogout = () => {
+    const content = <AppContent />;
+    
+    return (
+      <div className="relative">
+        <button
+          onClick={handleLogout}
+          className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+        >
+          Logout
+        </button>
+        {content}
+      </div>
+    );
+  };
+
   return (
     <Router>
-      <AppContent />
+      {isAuthenticated ? (
+        <AppContentWithLogout />
+      ) : (
+        <Login onLogin={handleLogin} />
+      )}
     </Router>
   );
 }
@@ -1526,24 +1564,22 @@ function Analytics({
       }
 
       switch (selectedPeriod) {
-        case "1 month":
-          // Filter cases for specific day
-          filteredCases = cases.filter(c => {
-            const caseDate = new Date(c.dateRecorded);
-            return caseDate.getDate().toString() === period &&
-                   caseDate.getMonth() === today.getMonth() &&
-                   caseDate.getFullYear() === today.getFullYear();
-          });
-          break;
-          
         case "3 months":
-          // Filter cases for specific week
+          // Fix week filtering logic
           const weekNumber = parseInt(period.substring(1));
+          const threeMonthsAgo = new Date(today);
+          threeMonthsAgo.setMonth(today.getMonth() - 3);
+          
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
-            const caseDaysAgo = Math.floor((today - caseDate) / (1000 * 60 * 60 * 24));
-            const caseWeek = Math.ceil(caseDaysAgo / 7);
-            return caseWeek === weekNumber && caseDaysAgo <= 90;
+            if (caseDate < threeMonthsAgo) return false;
+            
+            // Calculate week number (1-12) based on case date
+            const timeDiff = today - caseDate;
+            const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+            const caseWeek = Math.floor(daysDiff / 7) + 1;
+            
+            return caseWeek === weekNumber;
           });
           break;
           
@@ -1624,22 +1660,22 @@ function Analytics({
       }
 
       switch (selectedPeriod) {
-        case "1 month":
-          filteredCases = cases.filter(c => {
-            const caseDate = new Date(c.dateRecorded);
-            return caseDate.getDate().toString() === period &&
-                   caseDate.getMonth() === today.getMonth() &&
-                   caseDate.getFullYear() === today.getFullYear();
-          });
-          break;
-          
         case "3 months":
+          // Fix week filtering logic
           const weekNumber = parseInt(period.substring(1));
+          const threeMonthsAgo = new Date(today);
+          threeMonthsAgo.setMonth(today.getMonth() - 3);
+          
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
-            const caseDaysAgo = Math.floor((today - caseDate) / (1000 * 60 * 60 * 24));
-            const caseWeek = Math.ceil(caseDaysAgo / 7);
-            return caseWeek === weekNumber && caseDaysAgo <= 90;
+            if (caseDate < threeMonthsAgo) return false;
+            
+            // Calculate week number (1-12) based on case date
+            const timeDiff = today - caseDate;
+            const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+            const caseWeek = Math.floor(daysDiff / 7) + 1;
+            
+            return caseWeek === weekNumber;
           });
           break;
           
@@ -2413,6 +2449,63 @@ function Analytics({
 
         {/* Score Distribution Chart */}
 
+      </div>
+    </div>
+  );
+}
+
+// Create new Login component
+function Login({ onLogin }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (password === CORRECT_PASSWORD) {
+      localStorage.setItem(PASSWORD_KEY, 'true');
+      onLogin();
+    } else {
+      setError('Incorrect password');
+      setPassword('');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
+        <div>
+          <h2 className="text-center text-3xl font-bold text-gray-900">
+            Dental Lab Analytics
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="password" className="sr-only">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+              placeholder="Enter password"
+            />
+          </div>
+          {error && (
+            <p className="text-red-500 text-sm text-center">{error}</p>
+          )}
+          <div>
+            <button
+              type="submit"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Sign in
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
