@@ -365,146 +365,146 @@ function AppContent() {
   };
 
   // Generate PDF report
-  const generateReport = async () => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    let yPos = margin;
+  // const generateReport = async () => {
+  //   const doc = new jsPDF();
+  //   const pageWidth = doc.internal.pageSize.getWidth();
+  //   const pageHeight = doc.internal.pageSize.getHeight();
+  //   const margin = 20;
+  //   let yPos = margin;
     
-    // Helper function to check and add new page if needed
-    const checkAndAddPage = (heightNeeded) => {
-      if (yPos + heightNeeded >= pageHeight - margin) {
-        doc.addPage();
-        yPos = margin;
-        return true;
-      }
-      return false;
-    };
+  //   // Helper function to check and add new page if needed
+  //   const checkAndAddPage = (heightNeeded) => {
+  //     if (yPos + heightNeeded >= pageHeight - margin) {
+  //       doc.addPage();
+  //       yPos = margin;
+  //       return true;
+  //     }
+  //     return false;
+  //   };
 
-    // Title
-    doc.setFontSize(20);
-    doc.text('Analytics Report', pageWidth/2, yPos, { align: 'center' });
+  //   // Title
+  //   doc.setFontSize(20);
+  //   doc.text('Analytics Report', pageWidth/2, yPos, { align: 'center' });
     
-    // Period
-    yPos += 15;
-    doc.setFontSize(12);
-    doc.text(`Period: ${selectedPeriod}`, pageWidth/2, yPos, { align: 'center' });
+  //   // Period
+  //   yPos += 15;
+  //   doc.setFontSize(12);
+  //   doc.text(`Period: ${selectedPeriod}`, pageWidth/2, yPos, { align: 'center' });
     
-    // Date Generated
-    yPos += 10;
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth/2, yPos, { align: 'center' });
+  //   // Date Generated
+  //   yPos += 10;
+  //   doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth/2, yPos, { align: 'center' });
     
-    // Key Metrics Section
-    yPos += 20;
-    doc.setFontSize(16);
-    doc.text('Key Metrics', margin, yPos);
+  //   // Key Metrics Section
+  //   yPos += 20;
+  //   doc.setFontSize(16);
+  //   doc.text('Key Metrics', margin, yPos);
     
-    // Metrics data
-    yPos += 10;
-    doc.setFontSize(12);
-    const metrics = [
-      { label: 'Overall Score', value: `${formatNumber(data.overallScore)}/2` },
-      { label: 'Total Cases', value: data.totalCases },
-      { label: 'Success Rate', value: `${formatPercent(data.successRate)}` },
-      { label: 'Return Rate', value: `${formatPercent(data.returnRate)}` }
-    ];
+  //   // Metrics data
+  //   yPos += 10;
+  //   doc.setFontSize(12);
+  //   const metrics = [
+  //     { label: 'Overall Score', value: `${formatNumber(data.overallScore)}/2` },
+  //     { label: 'Total Cases', value: data.totalCases },
+  //     { label: 'Success Rate', value: `${formatPercent(data.successRate)}` },
+  //     { label: 'Return Rate', value: `${formatPercent(data.returnRate)}` }
+  //   ];
     
-    metrics.forEach(metric => {
-      checkAndAddPage(15);
-      yPos += 10;
-      doc.text(`${metric.label}: ${metric.value}`, margin + 10, yPos);
-    });
+  //   metrics.forEach(metric => {
+  //     checkAndAddPage(15);
+  //     yPos += 10;
+  //     doc.text(`${metric.label}: ${metric.value}`, margin + 10, yPos);
+  //   });
     
-    // Metric Averages Section
-    yPos += 20;
-    doc.setFontSize(16);
-    doc.text('Metric Averages', margin, yPos);
+  //   // Metric Averages Section
+  //   yPos += 20;
+  //   doc.setFontSize(16);
+  //   doc.text('Metric Averages', margin, yPos);
     
-    // Average data
-    yPos += 10;
-    doc.setFontSize(12);
-    const averages = [
-      { label: 'Margins', value: formatNumber(data.metricAverages.margins) },
-      { label: 'Contacts', value: formatNumber(data.metricAverages.contacts) },
-      { label: 'Occlusion', value: formatNumber(data.metricAverages.occlusion) },
-      { label: 'Color', value: formatNumber(data.metricAverages.color) },
-      { label: 'Contour', value: formatNumber(data.metricAverages.contour) }
-    ];
+  //   // Average data
+  //   yPos += 10;
+  //   doc.setFontSize(12);
+  //   const averages = [
+  //     { label: 'Margins', value: formatNumber(data.metricAverages.margins) },
+  //     { label: 'Contacts', value: formatNumber(data.metricAverages.contacts) },
+  //     { label: 'Occlusion', value: formatNumber(data.metricAverages.occlusion) },
+  //     { label: 'Color', value: formatNumber(data.metricAverages.color) },
+  //     { label: 'Contour', value: formatNumber(data.metricAverages.contour) }
+  //   ];
     
-    averages.forEach(avg => {
-      checkAndAddPage(15);
-      yPos += 10;
-      doc.text(`${avg.label} Average: ${avg.value}/2`, margin + 10, yPos);
-    });
+  //   averages.forEach(avg => {
+  //     checkAndAddPage(15);
+  //     yPos += 10;
+  //     doc.text(`${avg.label} Average: ${avg.value}/2`, margin + 10, yPos);
+  //   });
     
-    // Return Breakdown Section
-    yPos += 20;
-    doc.setFontSize(16);
-    doc.text('Return Breakdown', margin, yPos);
+  //   // Return Breakdown Section
+  //   yPos += 20;
+  //   doc.setFontSize(16);
+  //   doc.text('Return Breakdown', margin, yPos);
     
-    // Return data
-    yPos += 10;
-    doc.setFontSize(12);
-    const returns = [
-      { label: 'Margins', value: data.returnBreakdown.margins },
-      { label: 'Contacts', value: data.returnBreakdown.contacts },
-      { label: 'Occlusion', value: data.returnBreakdown.occlusion },
-      { label: 'Color', value: data.returnBreakdown.color },
-      { label: 'Contour', value: data.returnBreakdown.contour }
-    ];
+  //   // Return data
+  //   yPos += 10;
+  //   doc.setFontSize(12);
+  //   const returns = [
+  //     { label: 'Margins', value: data.returnBreakdown.margins },
+  //     { label: 'Contacts', value: data.returnBreakdown.contacts },
+  //     { label: 'Occlusion', value: data.returnBreakdown.occlusion },
+  //     { label: 'Color', value: data.returnBreakdown.color },
+  //     { label: 'Contour', value: data.returnBreakdown.contour }
+  //   ];
     
-    returns.forEach(ret => {
-      checkAndAddPage(15);
-      yPos += 10;
-      doc.text(`${ret.label}: ${ret.value} return${ret.value !== 1 ? 's' : ''}`, margin + 10, yPos);
-    });
+  //   returns.forEach(ret => {
+  //     checkAndAddPage(15);
+  //     yPos += 10;
+  //     doc.text(`${ret.label}: ${ret.value} return${ret.value !== 1 ? 's' : ''}`, margin + 10, yPos);
+  //   });
 
-    // Charts Section - Add screenshots of charts
-    try {
-      // Get references to chart containers
-      const chartElements = analyticsRef.current.querySelectorAll('.h-64');
+  //   // Charts Section - Add screenshots of charts
+  //   try {
+  //     // Get references to chart containers
+  //     const chartElements = analyticsRef.current.querySelectorAll('.h-64');
       
-      for (let i = 0; i < chartElements.length; i++) {
-        const canvas = await html2canvas(chartElements[i], {
-          scale: 2,
-          logging: false,
-          useCORS: true,
-          allowTaint: true,
-        });
+  //     for (let i = 0; i < chartElements.length; i++) {
+  //       const canvas = await html2canvas(chartElements[i], {
+  //         scale: 2,
+  //         logging: false,
+  //         useCORS: true,
+  //         allowTaint: true,
+  //       });
         
-        // Add new page for each chart
-        doc.addPage();
+  //       // Add new page for each chart
+  //       doc.addPage();
         
-        // Calculate dimensions to fit the page while maintaining aspect ratio
-        const imgWidth = pageWidth - (margin * 2);
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  //       // Calculate dimensions to fit the page while maintaining aspect ratio
+  //       const imgWidth = pageWidth - (margin * 2);
+  //       const imgHeight = (canvas.height * imgWidth) / canvas.width;
         
-        // Add chart title
-        const titles = ['Metric Trends', 'Success Rate Trend', 'Return Breakdown', 'Score Distribution'];
-        doc.setFontSize(16);
-        doc.text(titles[i], pageWidth/2, margin, { align: 'center' });
+  //       // Add chart title
+  //       const titles = ['Metric Trends', 'Success Rate Trend', 'Return Breakdown', 'Score Distribution'];
+  //       doc.setFontSize(16);
+  //       doc.text(titles[i], pageWidth/2, margin, { align: 'center' });
         
-        // Add the chart image
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        doc.addImage(imgData, 'JPEG', margin, margin + 20, imgWidth, imgHeight);
-      }
-    } catch (error) {
-      console.error('Error capturing charts:', error);
-    }
+  //       // Add the chart image
+  //       const imgData = canvas.toDataURL('image/jpeg', 0.8);
+  //       doc.addImage(imgData, 'JPEG', margin, margin + 20, imgWidth, imgHeight);
+  //     }
+  //   } catch (error) {
+  //     console.error('Error capturing charts:', error);
+  //   }
 
-    // Add page numbers
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(10);
-      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - margin, { align: 'right' });
-    }
+  //   // Add page numbers
+  //   const pageCount = doc.internal.getNumberOfPages();
+  //   for (let i = 1; i <= pageCount; i++) {
+  //     doc.setPage(i);
+  //     doc.setFontSize(10);
+  //     doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - margin, { align: 'right' });
+  //   }
     
-    // Save the PDF
-    const fileName = `analytics_report_${selectedPeriod.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-  };
+  //   // Save the PDF
+  //   const fileName = `analytics_report_${selectedPeriod.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.pdf`;
+  //   doc.save(fileName);
+  // };
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
@@ -544,7 +544,6 @@ function AppContent() {
               data={getAnalyticsData()}
               selectedPeriod={selectedPeriod}
               onPeriodChange={setSelectedPeriod}
-              onGenerateReport={generateReport}
               cases={cases}
             />
           } />
@@ -1415,7 +1414,6 @@ function Analytics({
   data,
   selectedPeriod,
   onPeriodChange,
-  onGenerateReport,
   cases,
 }) {
   const navigate = useNavigate();
