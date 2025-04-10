@@ -1564,6 +1564,20 @@ function Analytics({
       }
 
       switch (selectedPeriod) {
+        case "1 month":
+          // Fix one month filtering logic
+          const dayNumber = parseInt(period);
+          const oneMonthAgo = new Date(today);
+          oneMonthAgo.setMonth(today.getMonth() - 1);
+          
+          filteredCases = cases.filter(c => {
+            const caseDate = new Date(c.dateRecorded);
+            if (caseDate < oneMonthAgo) return false;
+            
+            return caseDate.getDate() === dayNumber;
+          });
+          break;
+
         case "3 months":
           // Fix week filtering logic
           const weekNumber = parseInt(period.substring(1));
@@ -1660,6 +1674,20 @@ function Analytics({
       }
 
       switch (selectedPeriod) {
+        case "1 month":
+          // Fix one month filtering logic
+          const dayNumber = parseInt(period);
+          const oneMonthAgo = new Date(today);
+          oneMonthAgo.setMonth(today.getMonth() - 1);
+          
+          filteredCases = cases.filter(c => {
+            const caseDate = new Date(c.dateRecorded);
+            if (caseDate < oneMonthAgo) return false;
+            
+            return caseDate.getDate() === dayNumber;
+          });
+          break;
+
         case "3 months":
           // Fix week filtering logic
           const weekNumber = parseInt(period.substring(1));
