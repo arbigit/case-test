@@ -2,26 +2,77 @@ import axios from "axios";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
-const api = {
-  getAllCases: async () => {
-    const response = await axios.get(`${API_URL}/cases`);
-    return response.data;
-  },
+class ApiService {
+  async getAllCases() {
+    try {
+      const response = await fetch(`${API_URL}/cases`);
+      if (!response.ok) throw new Error('Failed to fetch cases');
+      return response.json();
+    } catch (error) {
+      console.error('Error fetching cases:', error);
+      throw error;
+    }
+  }
 
-  createCase: async (caseData) => {
-    const response = await axios.post(`${API_URL}/cases`, caseData);
-    return response.data;
-  },
+  async createCase(caseData) {
+    try {
+      console.log('Creating case with data:', caseData);
+      const response = await fetch(`${API_URL}/cases`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(caseData),
+      });
+      if (!response.ok) throw new Error('Failed to create case');
+      return response.json();
+    } catch (error) {
+      console.error('Error creating case:', error);
+      throw error;
+    }
+  }
 
-  updateCase: async (id, caseData) => {
-    const response = await axios.put(`${API_URL}/cases/${id}`, caseData);
-    return response.data;
-  },
+  async updateCase(id, caseData) {
+    try {
+      console.log('Updating case with ID:', id);
+      console.log('Update data:', caseData);
 
-  deleteCase: async (id) => {
-    const response = await axios.delete(`${API_URL}/cases/${id}`);
-    return response.data;
-  },
-};
+      // Ensure we're using PUT method
+      const response = await fetch(`${API_URL}/cases/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(caseData),
+      });
 
-export default api;
+      if (!response.ok) {
+        console.error('Server responded with status:', response.status);
+        throw new Error('Failed to update case');
+      }
+
+      const updatedCase = await response.json();
+      console.log('Successfully updated case:', updatedCase);
+      return updatedCase;
+    } catch (error) {
+      console.error('Error updating case:', error);
+      throw error;
+    }
+  }
+
+  async deleteCase(id) {
+    try {
+      console.log('Deleting case with ID:', id);
+      const response = await fetch(`${API_URL}/cases/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete case');
+      return response.json();
+    } catch (error) {
+      console.error('Error deleting case:', error);
+      throw error;
+    }
+  }
+}
+
+export default new ApiService();

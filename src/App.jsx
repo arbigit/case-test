@@ -25,10 +25,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import api from './services/api';
+import { socketService } from './services/socket';
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { Notification } from './components/Notification';
 
 // Add new constant for localStorage key
 const STORAGE_KEY = 'dentalLabData';
@@ -40,7 +42,7 @@ const CORRECT_PASSWORD = 'cda'; // You should store this securely in environment
 // Create new wrapper component for the main app content
 function AppContent() {
   const navigate = useNavigate();
-  
+
   // Update state initializations with localStorage
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cases, setCases] = useState(() => {
@@ -64,6 +66,7 @@ function AppContent() {
       lastName: "",
     };
   });
+  const [notification, setNotification] = useState(null);
 
   // Add useEffect hooks to persist state changes
   useEffect(() => {
@@ -91,13 +94,13 @@ function AppContent() {
     const fetchCases = async () => {
       // Only fetch if we don't have cases in state
       // if (cases.length === 0) {
-        try {
-          const fetchedCases = await api.getAllCases();
-          setCases(fetchedCases);
-        } catch (error) {
-          console.error('Error fetching cases:', error);
-          showNotification('Error loading cases. Please try again.');
-        }
+      try {
+        const fetchedCases = await api.getAllCases();
+        setCases(fetchedCases);
+      } catch (error) {
+        console.error('Error fetching cases:', error);
+        showNotification('Error loading cases. Please try again.');
+      }
       // }
     };
     fetchCases();
@@ -301,46 +304,47 @@ function AppContent() {
 
   // Update handleSaveCase to handle persistence
   const handleSaveCase = async (caseData) => {
-    if (isSubmitting) {
-      return;
-    }
-
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      const isEdit = window.location.pathname === '/edit';
-      let savedCase;
-      
-      if (isEdit) {
-        savedCase = await api.updateCase(currentCase._id, caseData);
-        setCases(cases.map((c) => (c._id === currentCase._id ? savedCase : c)));
-        showNotification('Case updated successfully');
-      } else {
-        savedCase = await api.createCase({
+      if (caseData.id) {
+        // Update existing case
+        console.log('Updating case:', caseData.id);
+        const updatedCase = await api.updateCase(caseData.id, {
           ...caseData,
-          createdAt: new Date().toISOString(),
+          _id: undefined // Remove _id from request body
         });
-        setCases([savedCase, ...cases]);
-        showNotification('New case added successfully');
+        // Don't update local state - wait for socket event
+        showNotification(
+          `Case for ${updatedCase.firstName} ${updatedCase.lastName} updated successfully`,
+          'success'
+        );
+      } else {
+        // Create new case
+        console.log('Creating new case');
+        const newCase = await api.createCase(caseData);
+        // Don't update local state - wait for socket event
+        showNotification(
+          `New case added for ${newCase.firstName} ${newCase.lastName}`,
+          'success'
+        );
       }
-      
-      setCurrentCase(null); // This will trigger removal from localStorage
-      navigate('/');
+      setCurrentCase(null);
     } catch (error) {
       console.error('Error saving case:', error);
-      const action = window.location.pathname === '/edit' ? 'updating' : 'adding';
-      showNotification(`Error ${action} case. Please try again.`);
+      showNotification(
+        `Error ${caseData._id ? 'updating' : 'adding'} case. Please try again.`,
+        'error'
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-
   // Update handleDeleteCase to use API
   const handleDeleteCase = async (caseId) => {
     try {
       await api.deleteCase(caseId);
-      setCases(cases.filter((c) => c._id !== caseId));
-      setCurrentCase(null); // Clear the current case
+      setCases((prevCases) => prevCases.filter((c) => c._id !== caseId));
       showNotification('Case deleted successfully');
     } catch (error) {
       console.error('Error deleting case:', error);
@@ -355,12 +359,8 @@ function AppContent() {
   };
 
   // Show notification message
-  const [notification, setNotification] = useState(null);
-  const showNotification = (message) => {
-    setNotification(message);
-    setTimeout(() => {
-      setNotification(null);
-    }, 3000);
+  const showNotification = (message, type = 'info', navigateTo = null) => {
+    setNotification({ message, type, navigateTo });
   };
 
   // Remove the confirm modal and directly execute the callback
@@ -375,7 +375,7 @@ function AppContent() {
   //   const pageHeight = doc.internal.pageSize.getHeight();
   //   const margin = 20;
   //   let yPos = margin;
-    
+
   //   // Helper function to check and add new page if needed
   //   const checkAndAddPage = (heightNeeded) => {
   //     if (yPos + heightNeeded >= pageHeight - margin) {
@@ -389,21 +389,21 @@ function AppContent() {
   //   // Title
   //   doc.setFontSize(20);
   //   doc.text('Analytics Report', pageWidth/2, yPos, { align: 'center' });
-    
+
   //   // Period
   //   yPos += 15;
   //   doc.setFontSize(12);
   //   doc.text(`Period: ${selectedPeriod}`, pageWidth/2, yPos, { align: 'center' });
-    
+
   //   // Date Generated
   //   yPos += 10;
   //   doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth/2, yPos, { align: 'center' });
-    
+
   //   // Key Metrics Section
   //   yPos += 20;
   //   doc.setFontSize(16);
   //   doc.text('Key Metrics', margin, yPos);
-    
+
   //   // Metrics data
   //   yPos += 10;
   //   doc.setFontSize(12);
@@ -413,18 +413,18 @@ function AppContent() {
   //     { label: 'Success Rate', value: `${formatPercent(data.successRate)}` },
   //     { label: 'Return Rate', value: `${formatPercent(data.returnRate)}` }
   //   ];
-    
+
   //   metrics.forEach(metric => {
   //     checkAndAddPage(15);
   //     yPos += 10;
   //     doc.text(`${metric.label}: ${metric.value}`, margin + 10, yPos);
   //   });
-    
+
   //   // Metric Averages Section
   //   yPos += 20;
   //   doc.setFontSize(16);
   //   doc.text('Metric Averages', margin, yPos);
-    
+
   //   // Average data
   //   yPos += 10;
   //   doc.setFontSize(12);
@@ -435,40 +435,18 @@ function AppContent() {
   //     { label: 'Color', value: formatNumber(data.metricAverages.color) },
   //     { label: 'Contour', value: formatNumber(data.metricAverages.contour) }
   //   ];
-    
+
   //   averages.forEach(avg => {
   //     checkAndAddPage(15);
   //     yPos += 10;
   //     doc.text(`${avg.label} Average: ${avg.value}/2`, margin + 10, yPos);
-  //   });
-    
-  //   // Return Breakdown Section
-  //   yPos += 20;
-  //   doc.setFontSize(16);
-  //   doc.text('Return Breakdown', margin, yPos);
-    
-  //   // Return data
-  //   yPos += 10;
-  //   doc.setFontSize(12);
-  //   const returns = [
-  //     { label: 'Margins', value: data.returnBreakdown.margins },
-  //     { label: 'Contacts', value: data.returnBreakdown.contacts },
-  //     { label: 'Occlusion', value: data.returnBreakdown.occlusion },
-  //     { label: 'Color', value: data.returnBreakdown.color },
-  //     { label: 'Contour', value: data.returnBreakdown.contour }
-  //   ];
-    
-  //   returns.forEach(ret => {
-  //     checkAndAddPage(15);
-  //     yPos += 10;
-  //     doc.text(`${ret.label}: ${ret.value} return${ret.value !== 1 ? 's' : ''}`, margin + 10, yPos);
   //   });
 
   //   // Charts Section - Add screenshots of charts
   //   try {
   //     // Get references to chart containers
   //     const chartElements = analyticsRef.current.querySelectorAll('.h-64');
-      
+
   //     for (let i = 0; i < chartElements.length; i++) {
   //       const canvas = await html2canvas(chartElements[i], {
   //         scale: 2,
@@ -476,19 +454,19 @@ function AppContent() {
   //         useCORS: true,
   //         allowTaint: true,
   //       });
-        
+
   //       // Add new page for each chart
   //       doc.addPage();
-        
+
   //       // Calculate dimensions to fit the page while maintaining aspect ratio
   //       const imgWidth = pageWidth - (margin * 2);
   //       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
+
   //       // Add chart title
   //       const titles = ['Metric Trends', 'Success Rate Trend', 'Return Breakdown', 'Score Distribution'];
   //       doc.setFontSize(16);
   //       doc.text(titles[i], pageWidth/2, margin, { align: 'center' });
-        
+
   //       // Add the chart image
   //       const imgData = canvas.toDataURL('image/jpeg', 0.8);
   //       doc.addImage(imgData, 'JPEG', margin, margin + 20, imgWidth, imgHeight);
@@ -504,11 +482,94 @@ function AppContent() {
   //     doc.setFontSize(10);
   //     doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - margin, { align: 'right' });
   //   }
-    
+
   //   // Save the PDF
   //   const fileName = `analytics_report_${selectedPeriod.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.pdf`;
   //   doc.save(fileName);
   // };
+
+  // Socket.IO event handlers
+  useEffect(() => {
+    console.log('Setting up socket event handlers...');
+
+    socketService.connect().then(() => {
+      console.log('Socket connected in App component');
+    });
+
+    socketService.on("case:created", (data) => {
+      console.log('Received case:created event:', data);
+      setCases(prevCases => {
+        // Check if case already exists
+        if (prevCases.some(c => c._id === data.case._id)) {
+          console.log('Case already exists, skipping:', data.case._id);
+          return prevCases;
+        }
+        // Add the new case
+        console.log('Adding new case from socket:', data.case._id);
+        if (!isSubmitting) {
+          showNotification(
+            `New case added for ${data.case.firstName} ${data.case.lastName}`,
+            'info',
+            '/revise'
+          );
+        }
+        return [...prevCases, data.case];
+      });
+    });
+
+    socketService.on("case:updated", (data) => {
+      console.log('Received case:updated event:', data);
+      setCases(prevCases => {
+        // Check if the case exists and needs updating
+        const caseExists = prevCases.some(c => c._id === data.case._id);
+        if (!caseExists) {
+          console.log('Case not found for update:', data.case._id);
+          return prevCases;
+        }
+        console.log('Updating case from socket:', data.case._id);
+        // Update the case
+        if (!isSubmitting) {
+          showNotification(
+            `Case for ${data.case.firstName} ${data.case.lastName} was updated`,
+            'info',
+            '/revise'
+          );
+        }
+        return prevCases.map(c => c._id === data.case._id ? data.case : c);
+      });
+    });
+
+    socketService.on("case:deleted", (data) => {
+      console.log('Received case:deleted event:', data);
+      setCases(prevCases => {
+        // Check if the case exists and needs deleting
+        const caseExists = prevCases.some(c => c._id === data.caseId);
+        if (!caseExists) {
+          console.log('Case not found for deletion:', data.caseId);
+          return prevCases;
+        }
+        console.log('Deleting case from socket:', data.caseId);
+        // Delete the case
+        if (!isSubmitting) {
+          showNotification('A case was deleted', 'info', '/revise');
+        }
+        return prevCases.filter(c => c._id !== data.caseId);
+      });
+    });
+
+    const connectionCheck = setInterval(() => {
+      if (!socketService.isSocketConnected()) {
+        console.log('Socket disconnected, attempting to reconnect...');
+        socketService.connect();
+      }
+    }, 5000);
+
+    return () => {
+      console.log('Cleaning up socket event handlers...');
+      socketService.cleanup();
+      clearInterval(connectionCheck);
+    };
+  }, [currentCase, isSubmitting]); // Add isSubmitting to dependencies
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
@@ -518,7 +579,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<HomeView />} />
           <Route path="/add" element={
-            <CaseForm 
+            <CaseForm
               onSave={handleSaveCase}
               onCancel={() => handleLeavePage(() => navigate('/'))}
             />
@@ -557,9 +618,12 @@ function AppContent() {
 
       {/* Notification */}
       {notification && (
-        <div className="fixed bottom-4 right-4 bg-green-500 text-white p-3 rounded-md shadow-lg">
-          {notification}
-        </div>
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          navigateTo={notification.navigateTo}
+          onClose={() => setNotification(null)}
+        />
       )}
     </div>
   );
@@ -583,7 +647,7 @@ export default function App() {
   // Add logout button to AppContent
   const AppContentWithLogout = () => {
     const content = <AppContent />;
-    
+
     return (
       <div className="relative">
         <button
@@ -611,7 +675,7 @@ export default function App() {
 // Home view component
 function HomeView() {
   const navigate = useNavigate();
-  
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold border-b pb-2 mb-6">Labs</h1>
@@ -825,9 +889,8 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
               onChange={(e) =>
                 handleInputChange("dateRecorded", e.target.value)
               }
-              className={`w-full p-2 border rounded-md ${
-                formErrors.dateRecorded ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full p-2 border rounded-md ${formErrors.dateRecorded ? "border-red-500" : "border-gray-300"
+                }`}
             />
             {formErrors.dateRecorded && (
               <p className="text-red-500 text-xs mt-1">
@@ -841,9 +904,8 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
               type="text"
               value={formData.firstName}
               onChange={(e) => handleInputChange("firstName", e.target.value)}
-              className={`w-full p-2 border rounded-md ${
-                formErrors.firstName ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full p-2 border rounded-md ${formErrors.firstName ? "border-red-500" : "border-gray-300"
+                }`}
             />
             {formErrors.firstName && (
               <p className="text-red-500 text-xs mt-1">
@@ -858,9 +920,8 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
               value={formData.lastName}
               onChange={(e) => handleInputChange("lastName", e.target.value)}
               maxLength={1}
-              className={`w-full p-2 border rounded-md ${
-                formErrors.lastName ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full p-2 border rounded-md ${formErrors.lastName ? "border-red-500" : "border-gray-300"
+                }`}
             />
             {formErrors.lastName && (
               <p className="text-red-500 text-xs mt-1">{formErrors.lastName}</p>
@@ -883,31 +944,28 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleScoreChange("margins", 0)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.margins === 0
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.margins === 0
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 0 - Failure (Return to lab)
               </button>
               <button
                 onClick={() => handleScoreChange("margins", 1)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.margins === 1
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.margins === 1
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 1 - Significant Adjustment
               </button>
               <button
                 onClick={() => handleScoreChange("margins", 2)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.margins === 2
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.margins === 2
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 2 - No or Slight Adjustment
               </button>
@@ -927,31 +985,28 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleScoreChange("contacts", 0)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contacts === 0
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contacts === 0
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 0 - Failure (Return to lab)
               </button>
               <button
                 onClick={() => handleScoreChange("contacts", 1)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contacts === 1
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contacts === 1
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 1 - Significant Adjustment
               </button>
               <button
                 onClick={() => handleScoreChange("contacts", 2)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contacts === 2
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contacts === 2
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 2 - No or Slight Adjustment
               </button>
@@ -971,31 +1026,28 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleScoreChange("occlusion", 0)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.occlusion === 0
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.occlusion === 0
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 0 - Failure (Return to lab)
               </button>
               <button
                 onClick={() => handleScoreChange("occlusion", 1)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.occlusion === 1
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.occlusion === 1
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 1 - Significant Adjustment
               </button>
               <button
                 onClick={() => handleScoreChange("occlusion", 2)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.occlusion === 2
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.occlusion === 2
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 2 - No or Slight Adjustment
               </button>
@@ -1015,31 +1067,28 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleScoreChange("color", 0)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.color === 0
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.color === 0
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 0 - Failure (Return to lab)
               </button>
               <button
                 onClick={() => handleScoreChange("color", 1)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.color === 1
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.color === 1
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 1 - Significant Adjustment
               </button>
               <button
                 onClick={() => handleScoreChange("color", 2)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.color === 2
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.color === 2
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 2 - No or Slight Adjustment
               </button>
@@ -1059,31 +1108,28 @@ function CaseForm({ caseData = null, onSave, onCancel }) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleScoreChange("contour", 0)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contour === 0
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contour === 0
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 0 - Failure (Return to lab)
               </button>
               <button
                 onClick={() => handleScoreChange("contour", 1)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contour === 1
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contour === 1
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 1 - Significant Adjustment
               </button>
               <button
                 onClick={() => handleScoreChange("contour", 2)}
-                className={`flex-1 p-2 rounded-md ${
-                  formData.scores.contour === 2
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-200"
-                }`}
+                className={`flex-1 p-2 rounded-md ${formData.scores.contour === 2
+                  ? "bg-gray-800 text-white"
+                  : "bg-gray-200"
+                  }`}
               >
                 2 - No or Slight Adjustment
               </button>
@@ -1190,9 +1236,9 @@ function ReviseCase({
     const caseDate = new Date(c.dateRecorded);
 
     const dateMatch = (!dateFrom || caseDate >= dateFrom) && (!dateTo || caseDate <= dateTo);
-    const firstNameMatch = !searchFields.firstName || 
+    const firstNameMatch = !searchFields.firstName ||
       c.firstName.toLowerCase().includes(searchFields.firstName.toLowerCase());
-    const lastNameMatch = !searchFields.lastName || 
+    const lastNameMatch = !searchFields.lastName ||
       c.lastName.toLowerCase().includes(searchFields.lastName.toLowerCase());
 
     return dateMatch && firstNameMatch && lastNameMatch;
@@ -1404,37 +1450,34 @@ function ReviseCase({
                 <button
                   onClick={() => setCurrentPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className={`px-3 py-1 rounded-md ${
-                    currentPage === 1
-                      ? 'bg-gray-100 text-gray-400'
-                      : 'bg-black text-white hover:bg-gray-800'
-                  }`}
+                  className={`px-3 py-1 rounded-md ${currentPage === 1
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'bg-black text-white hover:bg-gray-800'
+                    }`}
                 >
                   Previous
                 </button>
-                
+
                 {pageNumbers.map(number => (
                   <button
                     key={number}
                     onClick={() => setCurrentPage(number)}
-                    className={`px-3 py-1 rounded-md ${
-                      currentPage === number
-                        ? 'bg-black text-white'
-                        : 'bg-gray-100 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1 rounded-md ${currentPage === number
+                      ? 'bg-black text-white'
+                      : 'bg-gray-100 hover:bg-gray-200'
+                      }`}
                   >
                     {number}
                   </button>
                 ))}
-                
+
                 <button
                   onClick={() => setCurrentPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className={`px-3 py-1 rounded-md ${
-                    currentPage === totalPages
-                      ? 'bg-gray-100 text-gray-400'
-                      : 'bg-black text-white hover:bg-gray-800'
-                  }`}
+                  className={`px-3 py-1 rounded-md ${currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'bg-black text-white hover:bg-gray-800'
+                    }`}
                 >
                   Next
                 </button>
@@ -1479,7 +1522,7 @@ function Analytics({
   const getTimePeriodsForChart = () => {
     const periods = [];
     const today = new Date();
-    
+
     switch (selectedPeriod) {
       case "1 month":
         // Show days of the month
@@ -1489,14 +1532,14 @@ function Analytics({
           periods.unshift(date.getDate().toString());
         }
         break;
-        
+
       case "3 months":
         // Show weeks (W1, W2, etc.)
         for (let i = 0; i < 12; i++) {
           periods.unshift(`W${i + 1}`);
         }
         break;
-        
+
       case "YTD":
         // Show months from start of year
         const currentMonth = today.getMonth();
@@ -1505,7 +1548,7 @@ function Analytics({
           periods.push(date.toLocaleString('default', { month: 'short' }));
         }
         break;
-        
+
       case "1 year":
         // Show all months
         for (let i = 0; i < 12; i++) {
@@ -1513,7 +1556,7 @@ function Analytics({
           periods.push(date.toLocaleString('default', { month: 'short' }));
         }
         break;
-        
+
       case "5 years":
         // Show years
         const currentYear = today.getFullYear();
@@ -1521,7 +1564,7 @@ function Analytics({
           periods.push((currentYear - i).toString());
         }
         break;
-        
+
       case "All Time":
         // Show years from first case
         const oldestCase = Math.min(...cases.map(c => new Date(c.dateRecorded).getFullYear()));
@@ -1529,7 +1572,7 @@ function Analytics({
           periods.push(year.toString());
         }
         break;
-        
+
       default:
         // Default to last 30 days
         for (let i = 0; i < 30; i++) {
@@ -1538,7 +1581,7 @@ function Analytics({
           periods.unshift(date.getDate().toString());
         }
     }
-    
+
     return periods;
   };
 
@@ -1546,10 +1589,10 @@ function Analytics({
   const getMetricTrendsData = () => {
     const periods = getTimePeriodsForChart();
     const today = new Date();
-    
+
     return periods.map((period) => {
       let filteredCases = [];
-      
+
       if (!cases || cases.length === 0) {
         return {
           name: period,
@@ -1569,11 +1612,11 @@ function Analytics({
           const dayNumber = parseInt(period);
           const oneMonthAgo = new Date(today);
           oneMonthAgo.setMonth(today.getMonth() - 1);
-          
+
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             if (caseDate < oneMonthAgo) return false;
-            
+
             return caseDate.getDate() === dayNumber;
           });
           break;
@@ -1583,32 +1626,32 @@ function Analytics({
           const weekNumber = parseInt(period.substring(1));
           const threeMonthsAgo = new Date(today);
           threeMonthsAgo.setMonth(today.getMonth() - 3);
-          
+
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             if (caseDate < threeMonthsAgo) return false;
-            
+
             // Calculate week number (1-12) based on case date
             const timeDiff = today - caseDate;
             const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
             const caseWeek = Math.floor(daysDiff / 7) + 1;
-            
+
             return caseWeek === weekNumber;
           });
           break;
-          
+
         case "YTD":
         case "1 year":
           // Filter cases for specific month
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             return caseDate.toLocaleString('default', { month: 'short' }) === period &&
-                   (selectedPeriod === "YTD" ? 
-                     caseDate.getFullYear() === today.getFullYear() :
-                     (today - caseDate) <= 365 * 24 * 60 * 60 * 1000);
+              (selectedPeriod === "YTD" ?
+                caseDate.getFullYear() === today.getFullYear() :
+                (today - caseDate) <= 365 * 24 * 60 * 60 * 1000);
           });
           break;
-          
+
         case "5 years":
         case "All Time":
           // Filter cases for specific year
@@ -1617,7 +1660,7 @@ function Analytics({
             return caseDate.getFullYear().toString() === period;
           });
           break;
-          
+
         default:
           filteredCases = [];
       }
@@ -1628,7 +1671,7 @@ function Analytics({
       const occlusion = calculateAverage(filteredCases.map(c => c.scores.occlusion));
       const color = calculateAverage(filteredCases.map(c => c.scores.color));
       const contour = calculateAverage(filteredCases.map(c => c.scores.contour));
-      
+
       // Calculate overall as average of all other metrics
       const overall = calculateAverage([margins, contacts, occlusion, color, contour]);
 
@@ -1661,10 +1704,10 @@ function Analytics({
   const getSuccessRateData = () => {
     const periods = getTimePeriodsForChart();
     const today = new Date();
-    
+
     return periods.map((period) => {
       let filteredCases = [];
-      
+
       if (!cases || cases.length === 0) {
         return {
           name: period,
@@ -1679,11 +1722,11 @@ function Analytics({
           const dayNumber = parseInt(period);
           const oneMonthAgo = new Date(today);
           oneMonthAgo.setMonth(today.getMonth() - 1);
-          
+
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             if (caseDate < oneMonthAgo) return false;
-            
+
             return caseDate.getDate() === dayNumber;
           });
           break;
@@ -1693,31 +1736,31 @@ function Analytics({
           const weekNumber = parseInt(period.substring(1));
           const threeMonthsAgo = new Date(today);
           threeMonthsAgo.setMonth(today.getMonth() - 3);
-          
+
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             if (caseDate < threeMonthsAgo) return false;
-            
+
             // Calculate week number (1-12) based on case date
             const timeDiff = today - caseDate;
             const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
             const caseWeek = Math.floor(daysDiff / 7) + 1;
-            
+
             return caseWeek === weekNumber;
           });
           break;
-          
+
         case "YTD":
         case "1 year":
           filteredCases = cases.filter(c => {
             const caseDate = new Date(c.dateRecorded);
             return caseDate.toLocaleString('default', { month: 'short' }) === period &&
-                   (selectedPeriod === "YTD" ? 
-                     caseDate.getFullYear() === today.getFullYear() :
-                     (today - caseDate) <= 365 * 24 * 60 * 60 * 1000);
+              (selectedPeriod === "YTD" ?
+                caseDate.getFullYear() === today.getFullYear() :
+                (today - caseDate) <= 365 * 24 * 60 * 60 * 1000);
           });
           break;
-          
+
         case "5 years":
         case "All Time":
           filteredCases = cases.filter(c => {
@@ -1725,13 +1768,13 @@ function Analytics({
             return caseDate.getFullYear().toString() === period;
           });
           break;
-          
+
         default:
           filteredCases = [];
       }
 
       // Calculate success rate
-      const successfulCases = filteredCases.filter(c => 
+      const successfulCases = filteredCases.filter(c =>
         c.scores.margins >= 1 &&
         c.scores.contacts >= 1 &&
         c.scores.occlusion >= 1 &&
@@ -1775,15 +1818,15 @@ function Analytics({
   // Prepare data for stacked bar chart
   const getScoreDistributionData = () => {
     const metrics = ['margins', 'contacts', 'occlusion', 'color', 'contour'];
-    
+
     return metrics.map(metric => ({
       name: metric.charAt(0).toUpperCase() + metric.slice(1),
       'Score 0': data.scoreDistribution[0][metric],
       'Score 1': data.scoreDistribution[1][metric],
       'Score 2': data.scoreDistribution[2][metric],
-      total: data.scoreDistribution[0][metric] + 
-             data.scoreDistribution[1][metric] + 
-             data.scoreDistribution[2][metric]
+      total: data.scoreDistribution[0][metric] +
+        data.scoreDistribution[1][metric] +
+        data.scoreDistribution[2][metric]
     }));
   };
 
@@ -1797,7 +1840,7 @@ function Analytics({
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 20;
     let yPos = margin;
-    
+
     // Helper function to check and add new page if needed
     const checkAndAddPage = (heightNeeded) => {
       if (yPos + heightNeeded >= pageHeight - margin) {
@@ -1810,22 +1853,22 @@ function Analytics({
 
     // Title
     doc.setFontSize(20);
-    doc.text('Analytics Report', pageWidth/2, yPos, { align: 'center' });
-    
+    doc.text('Analytics Report', pageWidth / 2, yPos, { align: 'center' });
+
     // Period
     yPos += 15;
     doc.setFontSize(12);
-    doc.text(`Period: ${selectedPeriod}`, pageWidth/2, yPos, { align: 'center' });
-    
+    doc.text(`Period: ${selectedPeriod}`, pageWidth / 2, yPos, { align: 'center' });
+
     // Date Generated
     yPos += 10;
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth/2, yPos, { align: 'center' });
-    
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPos, { align: 'center' });
+
     // Key Metrics Section
     yPos += 20;
     doc.setFontSize(16);
     doc.text('Key Metrics', margin, yPos);
-    
+
     // Metrics data
     yPos += 10;
     doc.setFontSize(12);
@@ -1835,18 +1878,18 @@ function Analytics({
       { label: 'Success Rate', value: `${formatPercent(data.successRate)}` },
       { label: 'Return Rate', value: `${formatPercent(data.returnRate)}` }
     ];
-    
+
     metrics.forEach(metric => {
       checkAndAddPage(15);
       yPos += 10;
       doc.text(`${metric.label}: ${metric.value}`, margin + 10, yPos);
     });
-    
+
     // Metric Averages Section
     yPos += 20;
     doc.setFontSize(16);
     doc.text('Metric Averages', margin, yPos);
-    
+
     // Average data
     yPos += 10;
     doc.setFontSize(12);
@@ -1857,18 +1900,18 @@ function Analytics({
       { label: 'Color', value: formatNumber(data.metricAverages.color) },
       { label: 'Contour', value: formatNumber(data.metricAverages.contour) }
     ];
-    
+
     averages.forEach(avg => {
       checkAndAddPage(15);
       yPos += 10;
       doc.text(`${avg.label} Average: ${avg.value}/2`, margin + 10, yPos);
     });
-    
+
     // Charts Section - Add screenshots of charts
     try {
       // Get references to chart containers
       const chartElements = analyticsRef.current.querySelectorAll('.h-64');
-      
+
       for (let i = 0; i < chartElements.length; i++) {
         const canvas = await html2canvas(chartElements[i], {
           scale: 2,
@@ -1876,19 +1919,19 @@ function Analytics({
           useCORS: true,
           allowTaint: true,
         });
-        
+
         // Add new page for each chart
         doc.addPage();
-        
+
         // Calculate dimensions to fit the page while maintaining aspect ratio
         const imgWidth = pageWidth - (margin * 2);
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
+
         // Add chart title
         const titles = ['Metric Trends', 'Success Rate Trend', 'Return Breakdown', 'Score Distribution'];
         doc.setFontSize(16);
-        doc.text(titles[i], pageWidth/2, margin, { align: 'center' });
-        
+        doc.text(titles[i], pageWidth / 2, margin, { align: 'center' });
+
         // Add the chart image
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
         doc.addImage(imgData, 'JPEG', margin, margin + 20, imgWidth, imgHeight);
@@ -1904,7 +1947,7 @@ function Analytics({
       doc.setFontSize(10);
       doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - margin, { align: 'right' });
     }
-    
+
     // Save the PDF
     const fileName = `analytics_report_${selectedPeriod.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
@@ -2039,73 +2082,67 @@ function Analytics({
             <div className="bg-white rounded-xl p-4 shadow-sm h-full">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">Metric Trends</h3>
-                
+
               </div>
 
               {/* Metric toggles */}
               <div className="flex flex-wrap gap-2 mb-4">
                 <button
                   onClick={() => toggleMetric('overall')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.overall
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.overall
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-purple-400"></div>
                   Overall
                 </button>
                 <button
                   onClick={() => toggleMetric('margins')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.margins
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.margins
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-blue-400"></div>
                   Margins
                 </button>
                 <button
                   onClick={() => toggleMetric('contacts')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.contacts
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.contacts
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-green-400"></div>
                   Contacts
                 </button>
                 <button
                   onClick={() => toggleMetric('occlusion')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.occlusion
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.occlusion
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-yellow-400"></div>
                   Occlusion
                 </button>
                 <button
                   onClick={() => toggleMetric('color')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.color
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.color
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-red-400"></div>
                   Color
                 </button>
                 <button
                   onClick={() => toggleMetric('contour')}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
-                    visibleMetrics.contour
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${visibleMetrics.contour
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   <div className="h-2 w-2 rounded-full bg-green-200"></div>
                   Contour
@@ -2116,18 +2153,18 @@ function Analytics({
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={metricTrendsData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
+                    <XAxis
                       dataKey="name"
                       interval="preserveStartEnd"
                       angle={selectedPeriod === "1 month" ? 0 : -45}
                       textAnchor="end"
                       height={60}
-                      tick={{fontSize: 12}}
+                      tick={{ fontSize: 12 }}
                     />
                     <YAxis domain={[0, 2]} />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value, name) => [
-                        `${value.toFixed(2)}/2`, 
+                        `${value.toFixed(2)}/2`,
                         name.charAt(0).toUpperCase() + name.slice(1)
                       ]}
                       labelFormatter={(label) => `${label} (${metricTrendsData.find(d => d.name === label)?.count || 0} cases)`}
@@ -2142,41 +2179,41 @@ function Analytics({
                       />
                     )}
                     {visibleMetrics.margins && (
-                      <Line 
-                        type="monotone" 
-                        dataKey="margins" 
+                      <Line
+                        type="monotone"
+                        dataKey="margins"
                         stroke="#6192ff"
                         name="Margins"
                       />
                     )}
                     {visibleMetrics.contacts && (
-                      <Line 
-                        type="monotone" 
-                        dataKey="contacts" 
+                      <Line
+                        type="monotone"
+                        dataKey="contacts"
                         stroke="#41d693"
                         name="Contacts"
                       />
                     )}
                     {visibleMetrics.occlusion && (
-                      <Line 
-                        type="monotone" 
-                        dataKey="occlusion" 
+                      <Line
+                        type="monotone"
+                        dataKey="occlusion"
                         stroke="#ffbb33"
                         name="Occlusion"
                       />
                     )}
                     {visibleMetrics.color && (
-                      <Line 
-                        type="monotone" 
-                        dataKey="color" 
+                      <Line
+                        type="monotone"
+                        dataKey="color"
                         stroke="#ff6b6b"
                         name="Color"
                       />
                     )}
                     {visibleMetrics.contour && (
-                      <Line 
-                        type="monotone" 
-                        dataKey="contour" 
+                      <Line
+                        type="monotone"
+                        dataKey="contour"
                         stroke="#a8e6cf"
                         name="Contour"
                       />
@@ -2192,7 +2229,7 @@ function Analytics({
             <div className="bg-white rounded-xl p-4 shadow-sm h-full">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">Success Rate Trend</h3>
-                
+
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -2204,7 +2241,7 @@ function Analytics({
                       angle={selectedPeriod === "1 month" ? 0 : -45}
                       textAnchor="end"
                       height={60}
-                      tick={{fontSize: 12}}
+                      tick={{ fontSize: 12 }}
                     />
                     <YAxis
                       domain={[0, 100]}
@@ -2307,7 +2344,7 @@ function Analytics({
             <div className="bg-white rounded-xl p-4 shadow-sm h-full">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">Return Breakdown</h3>
-                
+
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -2399,7 +2436,7 @@ function Analytics({
             <div className="bg-white rounded-xl p-4 shadow-sm h-full">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold">Score Distribution</h3>
-                
+
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -2415,13 +2452,13 @@ function Analytics({
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis 
-                      dataKey="name" 
+                    <YAxis
+                      dataKey="name"
                       type="category"
                       width={80}
                       tick={{ fontSize: 12 }}
                     />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value, name, props) => {
                         const total = props.payload.total;
                         const percentage = ((value / total) * 100).toFixed(1);
@@ -2429,40 +2466,40 @@ function Analytics({
                       }}
                     />
                     <Legend />
-                    <Bar 
-                      dataKey="Score 0" 
-                      stackId="a" 
-                      fill="#ff6b6b" 
+                    <Bar
+                      dataKey="Score 0"
+                      stackId="a"
+                      fill="#ff6b6b"
                       name="Failure"
                     >
-                      <LabelList 
-                        dataKey="Score 0" 
+                      <LabelList
+                        dataKey="Score 0"
                         position="center"
                         formatter={(value) => (value > 0 ? value : '')}
                         style={{ fill: 'white', fontSize: '12px' }}
                       />
                     </Bar>
-                    <Bar 
-                      dataKey="Score 1" 
-                      stackId="a" 
+                    <Bar
+                      dataKey="Score 1"
+                      stackId="a"
                       fill="#ffbb33"
                       name="Significant Adjustment"
                     >
-                      <LabelList 
-                        dataKey="Score 1" 
+                      <LabelList
+                        dataKey="Score 1"
                         position="center"
                         formatter={(value) => (value > 0 ? value : '')}
                         style={{ fill: 'white', fontSize: '12px' }}
                       />
                     </Bar>
-                    <Bar 
-                      dataKey="Score 2" 
-                      stackId="a" 
+                    <Bar
+                      dataKey="Score 2"
+                      stackId="a"
                       fill="#41d693"
                       name="No/Slight Adjustment"
                     >
-                      <LabelList 
-                        dataKey="Score 2" 
+                      <LabelList
+                        dataKey="Score 2"
                         position="center"
                         formatter={(value) => (value > 0 ? value : '')}
                         style={{ fill: 'white', fontSize: '12px' }}
